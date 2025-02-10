@@ -1,4 +1,5 @@
 import chalk from "chalk";
+import { Command } from "commander";
 import ora from "ora";
 import pLimit from "p-limit";
 import { Browser, Page } from "playwright";
@@ -16,14 +17,28 @@ import {
 } from "./ui/display";
 import { extractRelevantLinks, isValidUrl } from "./utils/url";
 
-// Define the websites to scrape
-const websites = [
-  "https://www.montreuxjazzfestival.com/",
-  "https://www.zuerichfilmfestival.com/en/",
-  "https://www.lucernefestival.ch",
-  "https://www.paleo.ch/en",
-  "https://www.artbasel.com/",
-];
+// Replace the hardcoded websites array with Commander setup
+const program = new Command();
+
+program
+  .name("contact-discovery-engine")
+  .description("A tool to discover contact information from websites")
+  .argument(
+    "<domains...>",
+    "Domain names to scan (e.g., domain-1.com domain-2.com)"
+  )
+  .parse();
+
+const websites = program.args.map((domain) =>
+  domain.startsWith("http://") || domain.startsWith("https://")
+    ? domain
+    : `https://${domain}`
+);
+
+if (websites.length === 0) {
+  console.error(chalk.red("❌ Please provide at least one domain"));
+  process.exit(1);
+}
 
 // Define schema to extract contents into
 const relevantLinksSchema = z.object({
