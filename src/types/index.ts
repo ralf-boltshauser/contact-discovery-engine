@@ -2,6 +2,7 @@ export type EmailSource = {
   link: string;
   email: string;
   timestamp: string;
+  isPrimaryDomain: boolean;
 };
 
 export type Result = {

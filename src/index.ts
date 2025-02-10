@@ -1,7 +1,9 @@
 import chalk from "chalk";
 import { Command } from "commander";
+import fs from "fs";
 import ora from "ora";
 import pLimit from "p-limit";
+import path from "path";
 import { Browser, Page } from "playwright";
 import { z } from "zod";
 import { BrowserPool } from "./services/BrowserPool";
@@ -54,8 +56,9 @@ const relevantLinksSchema = z.object({
 });
 
 // Increase concurrency limits significantly
-const CONCURRENT_WEBSITES = 8; // Allow more websites to be processed simultaneously
-const CONCURRENT_SUBLINKS = 20; // Allow more sublinks to be processed per website
+const CONCURRENT_WEBSITES = 1; // Reduced from 8 to 4 for better stability
+const CONCURRENT_SUBLINKS = 20; // Reduced from 20 to 5 to prevent overwhelming the browser pool
+const BROWSER_POOL_SIZE = 20; // Explicitly define browser pool size
 
 async function processWebsite(
   url: string,
@@ -68,6 +71,7 @@ async function processWebsite(
   const domain = new URL(url).hostname;
   let browser: Browser | null = null;
   let page: Page | null = null;
+  let emailsWithSources: EmailSource[] = [];
 
   try {
     browser = await browserPool.acquire();
@@ -85,8 +89,7 @@ async function processWebsite(
     const html = await page.content();
 
     // Get initial emails
-    let emails: string[] = [];
-    emails.push(...(await emailExtractor.extractEmailsFromUrl(url)));
+    const initialEmails = await emailExtractor.extractEmailsFromUrl(url);
 
     // Extract links before closing the main page
     const relevantLinksResult = {
@@ -124,9 +127,8 @@ async function processWebsite(
     const emailPromises = relevantLinksResult.object.top.map((link) =>
       limit(async () => {
         try {
-          const linkEmails = await emailExtractor.extractEmailsFromUrl(
-            link.link
-          );
+          const { primaryEmails, otherEmails } =
+            await emailExtractor.extractEmailsFromUrl(link.link);
           processedLinks++;
           const progress = `${processedLinks + failedLinks}/${totalSubLinks}`;
           const progressPercentage =
@@ -146,13 +148,24 @@ async function processWebsite(
             `Processing ${domain}: ${progress} sub-links`
           );
 
-          return linkEmails.map(
-            (email): EmailSource => ({
-              link: link.link,
-              email,
-              timestamp: new Date().toISOString(),
-            })
-          );
+          return [
+            ...primaryEmails.map(
+              (email: string): EmailSource => ({
+                link: link.link,
+                email,
+                timestamp: new Date().toISOString(),
+                isPrimaryDomain: true,
+              })
+            ),
+            ...otherEmails.map(
+              (email: string): EmailSource => ({
+                link: link.link,
+                email,
+                timestamp: new Date().toISOString(),
+                isPrimaryDomain: false,
+              })
+            ),
+          ];
         } catch (error) {
           failedLinks++;
           const progress = `${processedLinks + failedLinks}/${totalSubLinks}`;
@@ -256,7 +269,7 @@ async function main() {
   }).start();
 
   // Initialize browser pool with more browsers
-  const browserPool = new BrowserPool(8); // Increase from 2 to 8 browsers
+  const browserPool = new BrowserPool(BROWSER_POOL_SIZE);
   const emailExtractor = new EmailExtractor(browserPool);
 
   // Create a single status spinner for all updates
@@ -311,9 +324,7 @@ async function main() {
     const summaryTable = createSummaryTable();
 
     results.forEach(({ domain, emailsWithSources, error }: Result) => {
-      // Even with errors, if we have emails, show them
       if (error && emailsWithSources.length === 0) {
-        // Only show as failed if we have no emails at all
         summaryTable.push([
           domain,
           chalk.red("No emails found"),
@@ -322,16 +333,35 @@ async function main() {
           chalk.red(`Error: ${error}`),
         ]);
       } else {
-        // Show any successful results, even if there were some errors
         const uniqueUrls = [
           ...new Set(emailsWithSources.map((item: EmailSource) => item.link)),
         ];
+
+        const primaryEmails = emailsWithSources
+          .filter((item) => item.isPrimaryDomain)
+          .map((item) => chalk.green(item.email));
+
+        const otherEmails = emailsWithSources
+          .filter((item) => !item.isPrimaryDomain)
+          .map((item) => chalk.yellow(item.email));
+
+        const emailDisplay = [
+          primaryEmails.length > 0
+            ? chalk.bold("Primary Domain Emails:") +
+              "\n" +
+              primaryEmails.join("\n")
+            : "",
+          otherEmails.length > 0
+            ? "\n" + chalk.bold("Other Emails:") + "\n" + otherEmails.join("\n")
+            : "",
+        ]
+          .filter(Boolean)
+          .join("\n");
+
         summaryTable.push([
           domain,
           emailsWithSources.length > 0
-            ? emailsWithSources
-                .map((item: EmailSource) => chalk.green(item.email))
-                .join("\n")
+            ? emailDisplay
             : chalk.yellow("No emails found"),
           uniqueUrls.map((url: string) => chalk.yellow(url)).join("\n") ||
             chalk.gray("No valid URLs"),
@@ -349,6 +379,39 @@ async function main() {
 
     console.log(summaryTable.toString());
     console.log(chalk.bold.green("\n✨ Scraping completed successfully!\n"));
+
+    // Save results to JSON file
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const outputDir = "results";
+    const filename = `contact-discovery-${timestamp}.json`;
+
+    // Create results directory if it doesn't exist
+    if (!fs.existsSync(outputDir)) {
+      fs.mkdirSync(outputDir);
+    }
+
+    const outputPath = path.join(outputDir, filename);
+    const jsonResults = results.map(({ domain, emailsWithSources, error }) => ({
+      domain,
+      primaryEmails: emailsWithSources
+        .filter((item) => item.isPrimaryDomain)
+        .map((item) => ({
+          email: item.email,
+          source: item.link,
+          timestamp: item.timestamp,
+        })),
+      otherEmails: emailsWithSources
+        .filter((item) => !item.isPrimaryDomain)
+        .map((item) => ({
+          email: item.email,
+          source: item.link,
+          timestamp: item.timestamp,
+        })),
+      error: error || null,
+    }));
+
+    fs.writeFileSync(outputPath, JSON.stringify(jsonResults, null, 2));
+    console.log(chalk.cyan(`\n💾 Results saved to: ${outputPath}\n`));
   } finally {
     // Make sure both spinners are stopped even if there's an error
     statusSpinner.stop();

@@ -2,6 +2,11 @@ import { Browser, Page } from "playwright";
 import { getDomainFromUrl } from "../utils/url";
 import { BrowserPool } from "./BrowserPool";
 
+export interface ExtractedEmails {
+  primaryEmails: string[];
+  otherEmails: string[];
+}
+
 export class EmailExtractor {
   private browserPool: BrowserPool;
 
@@ -9,7 +14,7 @@ export class EmailExtractor {
     this.browserPool = browserPool;
   }
 
-  async extractEmailsFromUrl(url: string): Promise<string[]> {
+  async extractEmailsFromUrl(url: string): Promise<ExtractedEmails> {
     const domain = getDomainFromUrl(url);
     let browser: Browser | null = null;
     let page: Page | null = null;
@@ -32,8 +37,8 @@ export class EmailExtractor {
 
       const html = await page.content();
 
-      // Create more flexible email regex that includes common variations
-      const emailRegex = new RegExp(
+      // Extract primary domain emails
+      const primaryDomainRegex = new RegExp(
         `[a-zA-Z0-9._%+-]+@(?:${domain}|${domain.replace(
           /\./g,
           "\\."
@@ -41,10 +46,23 @@ export class EmailExtractor {
         "gmi"
       );
 
-      // Extract emails from the HTML with type assertion
-      const emails = [...new Set(html.match(emailRegex) || [])] as string[];
+      // Extract all emails
+      const allEmailsRegex =
+        /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/gim;
 
-      return emails;
+      const primaryEmails = [
+        ...new Set(html.match(primaryDomainRegex) || []),
+      ] as string[];
+      const allEmails = [
+        ...new Set(html.match(allEmailsRegex) || []),
+      ] as string[];
+
+      // Filter out primary emails from other emails
+      const otherEmails = allEmails.filter(
+        (email) => !primaryEmails.includes(email)
+      );
+
+      return { primaryEmails, otherEmails };
     } catch (error) {
       throw error;
     } finally {
