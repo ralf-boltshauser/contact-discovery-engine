@@ -1,0 +1,439 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Contact Discovery</title>
+    <style>
+      body {
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu,
+          Cantarell, sans-serif;
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 20px;
+        background: #f5f5f5;
+        line-height: 1.6;
+      }
+      .container {
+        background: white;
+        padding: 30px;
+        border-radius: 10px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      }
+      h1 {
+        color: #2c3e50;
+        text-align: center;
+        margin-bottom: 30px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+      }
+      .input-group {
+        margin-bottom: 20px;
+      }
+      textarea {
+        width: 100%;
+        height: 120px;
+        padding: 10px;
+        border: 1px solid #ddd;
+        border-radius: 5px;
+        font-size: 14px;
+        margin-bottom: 10px;
+        font-family: monospace;
+      }
+      button {
+        background: #3498db;
+        color: white;
+        border: none;
+        padding: 12px 20px;
+        border-radius: 5px;
+        cursor: pointer;
+        font-size: 16px;
+        width: 100%;
+        transition: background 0.3s ease;
+      }
+      button:hover {
+        background: #2980b9;
+      }
+      button:disabled {
+        background: #bdc3c7;
+        cursor: not-allowed;
+      }
+      #results {
+        margin-top: 20px;
+      }
+      .result-item {
+        background: #f8f9fa;
+        padding: 20px;
+        margin-bottom: 15px;
+        border-radius: 5px;
+        border-left: 4px solid #3498db;
+      }
+      .result-item h3 {
+        margin-top: 0;
+        color: #2c3e50;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .result-item.error {
+        border-left-color: #e74c3c;
+      }
+      .loading {
+        text-align: center;
+        margin: 20px 0;
+        display: none;
+      }
+      .loading.visible {
+        display: block;
+      }
+      .error-message {
+        color: #e74c3c;
+        padding: 10px;
+        background: #fadbd8;
+        border-radius: 5px;
+        margin-bottom: 10px;
+        display: none;
+      }
+      .email-list {
+        margin: 10px 0;
+        padding-left: 20px;
+      }
+      .email-list li {
+        margin-bottom: 5px;
+      }
+      .email-source {
+        font-size: 0.9em;
+        color: #666;
+        margin-left: 5px;
+      }
+      .help-text {
+        font-size: 0.9em;
+        color: #666;
+        margin-top: 5px;
+      }
+      .progress-bar {
+        background: #eee;
+        height: 6px;
+        border-radius: 3px;
+        margin-top: 10px;
+        overflow: hidden;
+      }
+      .progress-bar .fill {
+        background: #3498db;
+        height: 100%;
+        width: 0;
+        transition: width 0.3s ease;
+      }
+      .sublink-progress {
+        font-size: 0.9em;
+        color: #666;
+        margin-top: 10px;
+      }
+      .sublink-current {
+        font-family: monospace;
+        color: #2c3e50;
+        font-size: 0.85em;
+        margin-top: 5px;
+        word-break: break-all;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>
+        <img
+          src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cGF0aCBkPSJNMTIgMjJDMTcuNTIyOCAyMiAyMiAxNy41MjI4IDIyIDEyQzIyIDYuNDc3MTUgMTcuNTIyOCAyIDEyIDJDNi40NzcxNSAyIDIgNi40NzcxNSAyIDEyQzIgMTcuNTIyOCA2LjQ3NzE1IDIyIDEyIDIyWiIgc3Ryb2tlPSIjMzQ5OGRiIiBzdHJva2Utd2lkdGg9IjIiLz48cGF0aCBkPSJNMTIgOFYxNk0xNiAxMkg4IiBzdHJva2U9IiMzNDk4ZGIiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+PC9zdmc+"
+          alt="Target icon"
+        />
+        Contact Discovery
+      </h1>
+
+      <div class="input-group">
+        <textarea
+          id="urls"
+          placeholder="Enter website URLs (one per line)&#10;Example:&#10;example.com&#10;another-site.com"
+        ></textarea>
+        <p class="help-text">
+          💡 Tip: You can enter domain names directly (e.g., example.com) or
+          full URLs (e.g., https://example.com)
+        </p>
+        <button id="startButton" onclick="startDiscovery()">
+          Start Discovery
+        </button>
+      </div>
+
+      <div class="error-message" id="error"></div>
+
+      <div class="loading" id="loading">
+        <p>🔍 Discovering contacts... This may take a few minutes.</p>
+      </div>
+
+      <div id="results"></div>
+    </div>
+
+    <script>
+      let eventSource = null;
+
+      async function startDiscovery() {
+        const urlsText = document.getElementById("urls").value;
+        const urls = urlsText
+          .split("\n")
+          .map((url) => url.trim())
+          .filter((url) => url.length > 0);
+
+        if (urls.length === 0) {
+          showError("Please enter at least one URL");
+          return;
+        }
+
+        const button = document.getElementById("startButton");
+        const loading = document.getElementById("loading");
+        const results = document.getElementById("results");
+        const error = document.getElementById("error");
+
+        button.disabled = true;
+        loading.classList.add("visible");
+        results.innerHTML = "";
+        error.style.display = "none";
+
+        try {
+          // Start the discovery process
+          const response = await fetch("/discover", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Accept: "text/event-stream",
+            },
+            body: JSON.stringify({ urls }),
+          });
+
+          if (!response.ok) {
+            throw new Error("Failed to start discovery");
+          }
+
+          // Set up event source for real-time updates
+          const reader = response.body.getReader();
+          const decoder = new TextDecoder();
+
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            const chunk = decoder.decode(value);
+            const events = chunk.split("\n\n").filter(Boolean);
+
+            for (const eventText of events) {
+              const dataMatch = eventText.match(/^data: (.+)$/m);
+              if (!dataMatch) continue;
+
+              try {
+                const event = JSON.parse(dataMatch[1]);
+                handleEvent(event);
+              } catch (e) {
+                console.error("Failed to parse event:", e);
+              }
+            }
+          }
+        } catch (err) {
+          showError(err.message);
+        } finally {
+          button.disabled = false;
+          loading.classList.remove("visible");
+        }
+      }
+
+      function handleEvent(event) {
+        const loading = document.getElementById("loading");
+        const results = document.getElementById("results");
+        let domainItem;
+
+        switch (event.type) {
+          case "start":
+            loading.querySelector("p").textContent =
+              `🔍 Starting discovery for ${event.total} URLs...`;
+            break;
+
+          case "processing":
+            loading.querySelector("p").textContent =
+              `🔍 ${event.status} ${event.domain} (${event.current}/${event.total})...`;
+            break;
+
+          case "sublinks_found":
+            domainItem = document.querySelector(
+              `[data-domain="${event.domain}"]`
+            );
+            if (!domainItem) {
+              domainItem = document.createElement("div");
+              domainItem.className = "result-item";
+              domainItem.setAttribute("data-domain", event.domain);
+              results.appendChild(domainItem);
+            }
+
+            domainItem.innerHTML = `
+              <h3>
+                <img src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cGF0aCBkPSJNMTIgMTVDMTUuMzEzNyAxNSAxOCAxMi4zMTM3IDE4IDlDMTggNS42ODYyOSAxNS4zMTM3IDMgMTIgM0M4LjY4NjI5IDMgNiA1LjY4NjI5IDYgOUM2IDEyLjMxMzcgOC42ODYyOSAxNSAxMiAxNVoiIHN0cm9rZT0iIzM0OThkYiIgc3Ryb2tlLXdpZHRoPSIyIi8+PHBhdGggZD0iTTIwIDIxQzIwIDE4Ljc5MSAxNi40MTgzIDE3IDEyIDE3QzcuNTgxNzIgMTcgNCAxOC43OTEgNCAyMSIgc3Ryb2tlPSIjMzQ5OGRiIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPjwvc3ZnPg==" alt="Domain icon" width="24" height="24">
+                ${event.domain}
+              </h3>
+              <div class="sublink-progress">Found ${event.count} relevant sublinks to process</div>
+              <div class="progress-bar">
+                <div class="fill" style="width: 0%"></div>
+              </div>
+              <div class="sublink-current"></div>
+            `;
+            break;
+
+          case "sublink_progress":
+            domainItem = document.querySelector(
+              `[data-domain="${event.domain}"]`
+            );
+            if (domainItem) {
+              const progress = Math.round(
+                ((event.processedLinks + event.failedLinks) /
+                  event.totalSubLinks) *
+                  100
+              );
+              const progressBar = domainItem.querySelector(
+                ".progress-bar .fill"
+              );
+              const progressText =
+                domainItem.querySelector(".sublink-progress");
+              const currentLink = domainItem.querySelector(".sublink-current");
+
+              if (progressBar) {
+                progressBar.style.width = `${progress}%`;
+                progressBar.style.transition = "width 0.3s ease";
+              }
+              if (progressText) {
+                progressText.textContent =
+                  `Processing sublinks: ${event.processedLinks + event.failedLinks}/${event.totalSubLinks}` +
+                  (event.failedLinks > 0
+                    ? ` (${event.failedLinks} failed)`
+                    : "");
+              }
+              if (currentLink) {
+                currentLink.textContent = event.currentLink || "";
+              }
+            }
+            break;
+
+          case "sublink_error":
+            // We don't need to show individual sublink errors in the UI
+            // They're already counted in the progress
+            break;
+
+          case "result":
+            domainItem = document.querySelector(
+              `[data-domain="${event.result.domain}"]`
+            );
+            if (!domainItem) {
+              domainItem = document.createElement("div");
+              domainItem.className = "result-item";
+              domainItem.setAttribute("data-domain", event.result.domain);
+              results.appendChild(domainItem);
+            }
+
+            let content = `<h3>
+              <img src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cGF0aCBkPSJNMTIgMTVDMTUuMzEzNyAxNSAxOCAxMi4zMTM3IDE4IDlDMTggNS42ODYyOSAxNS4zMTM3IDMgMTIgM0M4LjY4NjI5IDMgNiA1LjY4NjI5IDYgOUM2IDEyLjMxMzcgOC42ODYyOSAxNSAxMiAxNVoiIHN0cm9rZT0iIzM0OThkYiIgc3Ryb2tlLXdpZHRoPSIyIi8+PHBhdGggZD0iTTIwIDIxQzIwIDE4Ljc5MSAxNi40MTgzIDE3IDEyIDE3QzcuNTgxNzIgMTcgNCAxOC43OTEgNCAyMSIgc3Ryb2tlPSIjMzQ5OGRiIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPjwvc3ZnPg==" alt="Domain icon" width="24" height="24">
+              ${event.result.domain}
+            </h3>`;
+
+            if (event.result.sublinksProcessed !== undefined) {
+              content += `<div class="sublink-progress">
+                Processed ${event.result.sublinksProcessed} sublinks
+                ${
+                  event.result.sublinksFailed > 0
+                    ? `(${event.result.sublinksFailed} failed)`
+                    : ""
+                }
+              </div>`;
+            }
+
+            if (
+              event.result.primaryEmails &&
+              event.result.primaryEmails.length > 0
+            ) {
+              content += "<h4>📧 Primary Domain Emails:</h4>";
+              content += '<ul class="email-list">';
+              event.result.primaryEmails.forEach((email) => {
+                content += `<li>${email.email}<span class="email-source">(Found at: ${email.source})</span></li>`;
+              });
+              content += "</ul>";
+            }
+
+            if (
+              event.result.otherEmails &&
+              event.result.otherEmails.length > 0
+            ) {
+              content += "<h4>📨 Other Emails:</h4>";
+              content += '<ul class="email-list">';
+              event.result.otherEmails.forEach((email) => {
+                content += `<li>${email.email}<span class="email-source">(Found at: ${email.source})</span></li>`;
+              });
+              content += "</ul>";
+            }
+
+            if (
+              (!event.result.primaryEmails ||
+                event.result.primaryEmails.length === 0) &&
+              (!event.result.otherEmails ||
+                event.result.otherEmails.length === 0)
+            ) {
+              content += "<p>No emails found</p>";
+            }
+
+            domainItem.innerHTML = content;
+            break;
+
+          case "error":
+            if (event.result) {
+              // Domain-specific error
+              let errorItem = document.querySelector(
+                `[data-domain="${event.result.domain}"]`
+              );
+              if (!errorItem) {
+                errorItem = document.createElement("div");
+                errorItem.className = "result-item error";
+                errorItem.setAttribute("data-domain", event.result.domain);
+                results.appendChild(errorItem);
+              }
+              errorItem.innerHTML = `
+                <h3>
+                  <img src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cGF0aCBkPSJNMTIgMTVDMTUuMzEzNyAxNSAxOCAxMi4zMTM3IDE4IDlDMTggNS42ODYyOSAxNS4zMTM3IDMgMTIgM0M4LjY4NjI5IDMgNiA1LjY4NjI5IDYgOUM2IDEyLjMxMzcgOC42ODYyOSAxNSAxMiAxNVoiIHN0cm9rZT0iI2U3NGMzYyIgc3Ryb2tlLXdpZHRoPSIyIi8+PHBhdGggZD0iTTIwIDIxQzIwIDE4Ljc5MSAxNi40MTgzIDE3IDEyIDE3QzcuNTgxNzIgMTcgNCAxOC43OTEgNCAyMSIgc3Ryb2tlPSIjZTc0YzNjIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPjwvc3ZnPg==" alt="Domain icon" width="24" height="24">
+                  ${event.result.domain}
+                </h3>
+                <p style="color: #e74c3c;">❌ Error: ${event.result.error}</p>
+              `;
+            } else {
+              // Global error
+              showError(event.error);
+            }
+            break;
+
+          case "complete":
+            loading.querySelector("p").textContent = "✅ Discovery completed!";
+            setTimeout(() => {
+              loading.classList.remove("visible");
+            }, 2000);
+            break;
+        }
+      }
+
+      function showError(message) {
+        const error = document.getElementById("error");
+        error.textContent = message;
+        error.style.display = "block";
+      }
+
+      // Handle Enter key in textarea
+      document.getElementById("urls").addEventListener("keydown", function (e) {
+        if (e.key === "Enter" && e.ctrlKey) {
+          e.preventDefault();
+          startDiscovery();
+        }
+      });
+    </script>
+  </body>
+</html>

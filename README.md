@@ -84,4 +84,9 @@ ISC
 
 ## Author
 
-[Your Name] 
+Ralf Boltshauser
+
+## Todos
+- [ ] make it accessible
+- [ ] profiles -> if a site yields more than 4 emails, it probably is a contact / team page or smth, then pass it to llm to create profiles of the people found.
+- [ ] 

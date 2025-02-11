@@ -19,28 +19,49 @@ import {
 } from "./ui/display";
 import { extractRelevantLinks, isValidUrl } from "./utils/url";
 
+// Increase concurrency limits significantly
+const CONCURRENT_WEBSITES = 1;
+const CONCURRENT_SUBLINKS = 20;
+const BROWSER_POOL_SIZE = 20;
+
 // Replace the hardcoded websites array with Commander setup
 const program = new Command();
 
 program
   .name("contact-discovery-engine")
   .description("A tool to discover contact information from websites")
+  .option("-w, --web", "Start in web interface mode")
   .argument(
-    "<domains...>",
+    "[domains...]",
     "Domain names to scan (e.g., domain-1.com domain-2.com)"
   )
+  .action(async (domains, options) => {
+    if (options.web) {
+      // Start web interface
+      const { startWebServer } = await import("./web/server");
+      startWebServer();
+      return;
+    }
+
+    // CLI mode
+    if (!domains || domains.length === 0) {
+      console.error(
+        chalk.red(
+          "❌ Please provide at least one domain or use --web for web interface"
+        )
+      );
+      process.exit(1);
+    }
+
+    const websites = domains.map((domain: string) =>
+      domain.startsWith("http://") || domain.startsWith("https://")
+        ? domain
+        : `https://${domain}`
+    );
+
+    await runCLI(websites);
+  })
   .parse();
-
-const websites = program.args.map((domain) =>
-  domain.startsWith("http://") || domain.startsWith("https://")
-    ? domain
-    : `https://${domain}`
-);
-
-if (websites.length === 0) {
-  console.error(chalk.red("❌ Please provide at least one domain"));
-  process.exit(1);
-}
 
 // Define schema to extract contents into
 const relevantLinksSchema = z.object({
@@ -54,11 +75,6 @@ const relevantLinksSchema = z.object({
       "List of relevant links that might yield more information and emails of organizers, search for links that allow application of artists and bands etc! Only include links that have the same domain, and that are yielding possibilities to find more email addresses! Not just some random links like gallery, bühne, etc. Focus on terms like bands, application, bewerbung, etc. Take only the most relevant links!"
     ),
 });
-
-// Increase concurrency limits significantly
-const CONCURRENT_WEBSITES = 1; // Reduced from 8 to 4 for better stability
-const CONCURRENT_SUBLINKS = 20; // Reduced from 20 to 5 to prevent overwhelming the browser pool
-const BROWSER_POOL_SIZE = 20; // Explicitly define browser pool size
 
 async function processWebsite(
   url: string,
@@ -249,7 +265,7 @@ async function processWebsite(
   }
 }
 
-async function main() {
+async function runCLI(websites: string[]) {
   // Validate URLs first
   const invalidUrls = websites.filter((url) => !isValidUrl(url));
   if (invalidUrls.length > 0) {
@@ -323,7 +339,8 @@ async function main() {
 
     const summaryTable = createSummaryTable();
 
-    results.forEach(({ domain, emailsWithSources, error }: Result) => {
+    results.forEach((result) => {
+      const { domain, emailsWithSources, error } = result;
       if (error && emailsWithSources.length === 0) {
         summaryTable.push([
           domain,
@@ -419,8 +436,3 @@ async function main() {
     await browserPool.closeAll();
   }
 }
-
-main().catch((error) => {
-  console.error(chalk.red("\n❌ Fatal error:"), error);
-  process.exit(1);
-});

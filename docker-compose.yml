@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  contact-discovery:
+    build: .
+    ports:
+      - "3000:3000"
+    init: true
+    cap_add:
+      - SYS_ADMIN
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+    volumes:
+      - ./results:/app/results
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge 
