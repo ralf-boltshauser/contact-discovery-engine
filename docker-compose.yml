@@ -4,14 +4,14 @@ services:
   contact-discovery:
     build: .
     ports:
-      - "3000:3000"
+      - "4242:4242"
     init: true
     cap_add:
       - SYS_ADMIN
     restart: unless-stopped
     environment:
       - NODE_ENV=production
-      - PORT=3000
+      - PORT=4242
     volumes:
       - ./results:/app/results
     networks:
